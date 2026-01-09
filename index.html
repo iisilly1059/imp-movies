@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Imp Movies </title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;500;700&display=swap');
+        
+        :root { --accent: #fff; }
+
+        body { 
+            background: #000; color: #fff; font-family: 'Space Grotesk', sans-serif; 
+            -webkit-font-smoothing: antialiased; overflow-x: hidden; 
+        }
+
+        .rect-btn {
+            border: 1px solid #222; background: #0a0a0a; padding: 8px 16px;
+            text-transform: uppercase; font-size: 11px; font-weight: 700;
+            letter-spacing: 0.1em; transition: 0.15s; cursor: pointer;
+            display: flex; align-items: center; gap: 8px;
+        }
+        .rect-btn:hover { border-color: var(--accent); }
+        .active-rect { background: var(--accent) !important; color: #000 !important; border-color: var(--accent) !important; }
+
+        .skeleton {
+            background: linear-gradient(90deg, #050505 25%, #111 50%, #050505 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+        .card { position: relative; overflow: hidden; background: #080808; border: 1px solid #111; transition: 0.3s; }
+        .card:hover { border-color: var(--accent); }
+        .card img { transition: transform 0.6s cubic-bezier(0.2, 0, 0.2, 1); }
+        .card:hover img { transform: scale(1.05); filter: brightness(0.3); }
+        
+        .card-info {
+            position: absolute; bottom: 0; left: 0; width: 100%; padding: 15px;
+            background: linear-gradient(transparent, rgba(0,0,0,0.95) 80%);
+            transform: translateY(100%); transition: 0.3s ease;
+        }
+        .card:hover .card-info { transform: translateY(0); }
+
+        .status-message {
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            height: 100%; text-align: center; color: #fff; font-size: 0.95rem;
+        }
+        .status-message::before {
+            content: ''; width: 40px; height: 40px;
+            border: 3px solid #222; border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        #video-modal { display: none; position: fixed; inset: 0; background: #000; z-index: 1000; overflow: hidden; }
+        
+        #settings-menu {
+            display: none; position: fixed; top: 85px; right: 24px;
+            background: #0f0f0f; border: 1px solid #222;
+            padding: 30px; width: 320px; z-index: 1100;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+        }
+
+        iframe { height: calc(100vh - 85px); width: 100%; border: none; display: none; }
+        input[type="number"]::-webkit-inner-spin-button { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="video-modal">
+        <div class="sticky top-0 w-full p-6 z-[101] flex justify-between items-center bg-black/90 backdrop-blur-xl border-b border-white/5">
+            <div class="flex flex-col">
+                <h2 id="playing-title" class="text-xl font-bold uppercase tracking-tighter">Loading...</h2>
+            </div>
+            <div class="flex gap-2">
+                <div id="tv-controls" class="hidden flex items-center gap-4 mr-4 bg-zinc-900/50 p-1 px-3 rounded border border-zinc-800">
+                    <span class="text-[9px] text-zinc-500 font-bold">S</span>
+                    <input id="season" type="number" value="1" min="1" class="bg-transparent text-sm font-bold w-6 outline-none text-zinc-100" onchange="loadIframe()">
+                    <span class="text-[9px] text-zinc-500 font-bold">E</span>
+                    <input id="episode" type="number" value="1" min="1" class="bg-transparent text-sm font-bold w-6 outline-none text-zinc-100" onchange="loadIframe()">
+                </div>
+                <button onclick="toggleWatchlist()" id="watchlist-btn" class="rect-btn">Save</button>
+                <button onclick="toggleSettings()" class="rect-btn">Settings</button>
+                <button onclick="closePlayer()" class="rect-btn border-red-500/20 hover:bg-red-600">Close</button>
+            </div>
+        </div>
+
+        <div id="settings-menu" class="rounded-sm">
+            <h3 class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-6">Advanced Settings</h3>
+            
+            <div class="space-y-8">
+                <div>
+                    <label class="text-[10px] uppercase mb-3 block text-zinc-400">Accent Theme</label>
+                    <div class="flex gap-3">
+                        <div onclick="setAccent('#fff')" class="w-6 h-6 bg-white cursor-pointer rounded-full border-2 border-transparent hover:border-zinc-400"></div>
+                        <div onclick="setAccent('#00f2ff')" class="w-6 h-6 bg-[#00f2ff] cursor-pointer rounded-full"></div>
+                        <div onclick="setAccent('#bf00ff')" class="w-6 h-6 bg-[#bf00ff] cursor-pointer rounded-full"></div>
+                        <div onclick="setAccent('#ff3c00')" class="w-6 h-6 bg-[#ff3c00] cursor-pointer rounded-full"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="text-[10px] uppercase mb-2 block text-zinc-400">Playback Server</label>
+                    <select id="srv-select" onchange="switchServer(this.value)" class="w-full bg-zinc-900 border border-zinc-800 p-3 text-xs outline-none focus:border-zinc-500 transition">
+                        <option value="0">Server 1 (Primary)</option>
+                        <option value="1">Server 2 (Legacy)</option>
+                        <option value="2">Server 3 (Direct)</option>
+                    </select>
+                </div>
+
+                <div class="pt-4 border-t border-zinc-800">
+                    <button onclick="localStorage.clear(); location.reload();" class="text-[9px] text-red-500 font-bold uppercase hover:underline">Clear All Cached Data</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="player-status" class="status-message">Establishing Secure Stream...</div>
+        <div class="w-full h-full" id="iframe-container"></div>
+    </div>
+
+    <header class="sticky top-0 z-50 bg-black/90 backdrop-blur-lg border-b border-zinc-900">
+        <div class="max-w-7xl mx-auto px-6 py-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <h1 class="text-3xl font-black tracking-tighter cursor-pointer" onclick="location.reload()">IMP</h1>
+                <div class="flex-1 max-w-2xl relative">
+                    <input id="search" type="text" placeholder="Search... (Press '/' to focus)" class="w-full bg-zinc-900 border border-zinc-800 p-3 px-6 text-sm outline-none focus:border-zinc-500 transition">
+                </div>
+                <div class="flex gap-2">
+                    <button id="movie-mode" class="rect-btn active-rect" onclick="setMode('movie')">Movies</button>
+                    <button id="tv-mode" class="rect-btn" onclick="setMode('tv')">TV</button>
+                </div>
+            </div>
+            
+            <div class="flex gap-3 overflow-x-auto no-scrollbar mt-8 pb-2">
+                <button class="genre-btn rect-btn active-rect whitespace-nowrap" onclick="changeCat('trending', this)">Trending</button>
+                <button class="genre-btn rect-btn whitespace-nowrap" onclick="changeCat('watchlist', this)">My List</button>
+                <button class="genre-btn rect-btn whitespace-nowrap" onclick="filterGenre(28, this)">Action</button>
+                <button class="genre-btn rect-btn whitespace-nowrap" onclick="filterGenre(878, this)">Sci-Fi</button>
+                <button class="genre-btn rect-btn whitespace-nowrap" onclick="filterGenre(16, this)">Animation</button>
+                <button class="genre-btn rect-btn whitespace-nowrap" onclick="changeCat('top_rated', this)">Recommended</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-12">
+        <div id="grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6"></div>
+        <div id="loader-skeleton" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 mt-6"></div>
+    </main>
+
+    <script>
+        const API_KEY = '23858128f75856b4d4711b986e274e50';
+        const SERVERS = ['https://vidsrc.cc/v2/embed/', 'https://vidsrc.xyz/embed/', 'https://embed.su/embed/'];
+        
+        let page = 1, mode = 'movie', currentCat = 'trending', currentGenre = '', loading = false, activeId = null, srvIdx = 0, currentItem = null;
+        let watchlist = JSON.parse(localStorage.getItem('imp_watchlist_v2') || '[]');
+
+        function setAccent(color) {
+            document.documentElement.style.setProperty('--accent', color);
+            localStorage.setItem('imp_accent', color);
+            document.querySelectorAll('.active-rect').forEach(el => el.style.backgroundColor = color);
+        }
+
+        document.getElementById('search').addEventListener('keyup', (e) => {
+            if(e.key === 'Enter') {
+                const q = e.target.value;
+                if(!q) return;
+                document.getElementById('grid').innerHTML = '';
+                fetch(`https://api.themoviedb.org/3/search/multi?api_key=${API_KEY}&query=${q}`).then(r=>r.json()).then(d=>render(d.results));
+            }
+        });
+
+        window.onkeydown = (e) => {
+            if (e.key === '/') { e.preventDefault(); document.getElementById('search').focus(); }
+            if (e.key === "Escape") { closePlayer(); document.getElementById('settings-menu').style.display = 'none'; }
+        };
+
+        async function fetchData(reset = false) {
+            if (reset) { page = 1; document.getElementById('grid').innerHTML = ''; }
+            if (loading) return;
+            if (currentCat === 'watchlist') { render(watchlist); document.getElementById('loader-skeleton').classList.add('hidden'); return; }
+
+            loading = true;
+            document.getElementById('loader-skeleton').classList.remove('hidden');
+            let url = `https://api.themoviedb.org/3/discover/${mode}?api_key=${API_KEY}&page=${page}&sort_by=popularity.desc`;
+            if (currentCat === 'trending') url = `https://api.themoviedb.org/3/trending/${mode}/week?api_key=${API_KEY}&page=${page}`;
+            if (currentCat === 'top_rated') url = `https://api.themoviedb.org/3/${mode}/top_rated?api_key=${API_KEY}&page=${page}`;
+            if (currentGenre) url = `https://api.themoviedb.org/3/discover/${mode}?api_key=${API_KEY}&with_genres=${currentGenre}&page=${page}`;
+
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                render(data.results);
+                page++;
+            } catch (e) { console.error(e); }
+            loading = false;
+            document.getElementById('loader-skeleton').classList.add('hidden');
+        }
+
+        function render(items) {
+            const container = document.getElementById('grid');
+            items.forEach(item => {
+                if(!item.poster_path) return;
+                const div = document.createElement('div');
+                div.className = 'card cursor-pointer group';
+                div.onclick = () => play(item);
+                div.innerHTML = `
+                    <div class="relative aspect-[2/3]">
+                        <img src="https://image.tmdb.org/t/p/w400${item.poster_path}" class="w-full h-full object-cover">
+                        <div class="card-info">
+                            <h3 class="text-[11px] font-bold uppercase truncate mb-1">${item.title || item.name}</h3>
+                            <span class="text-[9px] text-zinc-400 font-bold">${(item.vote_average || 0).toFixed(1)} TMDB</span>
+                        </div>
+                    </div>`;
+                container.appendChild(div);
+            });
+        }
+
+        async function play(item) {
+            currentItem = item; activeId = item.id;
+            document.getElementById('playing-title').innerText = item.title || item.name;
+            document.getElementById('video-modal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+            updateWatchlistBtn();
+            document.getElementById('tv-controls').classList.toggle('hidden', mode !== 'tv');
+            loadIframe();
+        }
+
+        function loadIframe() {
+            const status = document.getElementById('player-status');
+            status.style.display = 'flex';
+            const s = document.getElementById('season').value, e = document.getElementById('episode').value;
+            const url = mode === 'movie' ? `${SERVERS[srvIdx]}movie/${activeId}` : `${SERVERS[srvIdx]}tv/${activeId}/${s}/${e}`;
+            
+            const iframe = document.createElement('iframe');
+            iframe.src = url;
+            iframe.setAttribute("sandbox", "allow-forms allow-scripts allow-pointer-lock allow-same-origin");
+            iframe.allowFullscreen = true;
+            iframe.onload = () => {
+                status.style.display = 'none';
+                iframe.style.display = 'block';
+            };
+
+            const container = document.getElementById('iframe-container');
+            container.innerHTML = '';
+            container.appendChild(iframe);
+        }
+
+        function toggleSettings() {
+            const menu = document.getElementById('settings-menu');
+            menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+        }
+
+        function switchServer(val) { srvIdx = val; loadIframe(); }
+
+        function toggleWatchlist() {
+            const idx = watchlist.findIndex(i => i.id === activeId);
+            idx === -1 ? watchlist.push(currentItem) : watchlist.splice(idx, 1);
+            localStorage.setItem('imp_watchlist_v2', JSON.stringify(watchlist));
+            updateWatchlistBtn();
+        }
+
+        function updateWatchlistBtn() {
+            const inList = watchlist.some(i => i.id === activeId);
+            document.getElementById('watchlist-btn').innerText = inList ? "Saved" : "Save";
+        }
+
+        function closePlayer() {
+            document.getElementById('video-modal').style.display = 'none';
+            document.getElementById('settings-menu').style.display = 'none';
+            document.getElementById('iframe-container').innerHTML = '';
+            document.body.style.overflow = 'auto';
+        }
+
+        function setMode(m) { mode = m; document.getElementById('movie-mode').className = m === 'movie' ? 'rect-btn active-rect' : 'rect-btn'; document.getElementById('tv-mode').className = m === 'tv' ? 'rect-btn active-rect' : 'rect-btn'; fetchData(true); }
+        function changeCat(c, el) { currentCat = c; currentGenre = ''; updateActive(el); fetchData(true); }
+        function filterGenre(g, el) { currentGenre = g; currentCat = ''; updateActive(el); fetchData(true); }
+        function updateActive(el) { document.querySelectorAll('.genre-btn').forEach(b => b.classList.remove('active-rect')); el.classList.add('active-rect'); }
+        window.onscroll = () => { if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 800) fetchData(); };
+        
+        const savedAccent = localStorage.getItem('imp_accent');
+        if(savedAccent) setAccent(savedAccent);
+        for(let i=0; i<12; i++) document.getElementById('loader-skeleton').innerHTML += `<div class="aspect-[2/3] skeleton"></div>`;
+        fetchData();
+    </script>
+</body>
+</html>
